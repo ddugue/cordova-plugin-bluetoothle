@@ -133,6 +133,7 @@ NSString *const logUnsubscribeAlready = @"Already unsubscribed";
 NSString *const logAlreadyDiscovering = @"Already discovering device";
 
 NSString *const operationConnect = @"connect";
+NSString *const operationDisconnect = @"disconnect";
 NSString *const operationDiscover = @"discover";
 NSString *const operationRssi = @"rssi";
 NSString *const operationRead = @"read";
@@ -995,7 +996,8 @@ NSString *const operationWrite = @"write";
     [connection removeObjectForKey:operationConnect];
   }  else {
     //Else return disconnecting status and save callback for disconnect status
-    [connection setObject: command.callbackId forKey:operationConnect];
+    [connection removeObjectForKey:operationConnect];
+    [connection setObject: command.callbackId forKey:operationDisconnect];
   }
 
   //Disconnect
@@ -2198,7 +2200,7 @@ NSString *const operationWrite = @"write";
   [returnObj setValue:errorConnect forKey:keyError];
   [returnObj setValue:error.description forKey:keyMessage];
 
-  CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:returnObj];
+  CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:returnObj];
   [pluginResult setKeepCallbackAsBool:false];
   [self.commandDelegate sendPluginResult:pluginResult callbackId:connectCallback];
 }
@@ -2224,7 +2226,6 @@ NSString *const operationWrite = @"write";
   }
 
   //Get connect callback
-  NSString* callback = [connection objectForKey:operationConnect];
 
   //Reset all callbacks
   connection = [NSMutableDictionary dictionary];
@@ -2232,21 +2233,33 @@ NSString *const operationWrite = @"write";
 
   [connections setObject:connection forKey:peripheral.identifier];
 
-  //If no connect callback, can't continue
-  if (callback == nil) {
-    return;
-  }
+  NSString* callback = [connection objectForKey:operationDisconnect];
 
-  //Return disconnected connection information
   NSMutableDictionary* returnObj = [NSMutableDictionary dictionary];
-
   [self addDevice:peripheral :returnObj];
 
-  [returnObj setValue:statusDisconnected forKey:keyStatus];
+  //If no connect callback, can't continue
+  if (callback == nil) {
+    // No disconnect in effect, means it is an error!
+    callback = [connection objectForKey:operationConnect];
+    if (callback == nil) {
+      return;
+    }
 
-  CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:returnObj];
+    [returnObj setValue:errorConnect forKey:keyError];
+    [returnObj setValue:error.description forKey:keyMessage];
+
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:returnObj];
+
+  } else {
+    //Return disconnected connection information
+    [returnObj setValue:statusDisconnected forKey:keyStatus];
+
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:returnObj];
+  }
   [pluginResult setKeepCallbackAsBool:false];
   [self.commandDelegate sendPluginResult:pluginResult callbackId:callback];
+
 }
 
 //Peripheral Delegates
