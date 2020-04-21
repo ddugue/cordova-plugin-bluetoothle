@@ -277,6 +277,7 @@ public class BluetoothLePlugin extends CordovaPlugin {
   private final String logRequiresAPI21 = "Requires API level 21";
 
   private final String operationConnect = "connect";
+  private final String operationDisconnect = "disconnect";
   private final String operationDiscover = "discover";
   private final String operationRssi = "rssi";
   private final String operationRead = "read";
@@ -1011,16 +1012,16 @@ public class BluetoothLePlugin extends CordovaPlugin {
     }
   }
 
-  
+
   /**
-  * Retrieves a minimal set of adapter details 
+  * Retrieves a minimal set of adapter details
   * (address, name, initialized state, enabled state, scanning state, discoverable state)
   */
-  private void getAdapterInfoAction(CallbackContext callbackContext) {    
-    JSONObject returnObj = new JSONObject();    
+  private void getAdapterInfoAction(CallbackContext callbackContext) {
+    JSONObject returnObj = new JSONObject();
 
     // Not yet initialized
-    if (bluetoothAdapter == null) {      
+    if (bluetoothAdapter == null) {
       Activity activity = cordova.getActivity();
       BluetoothManager bluetoothManager = (BluetoothManager) activity.getSystemService(Context.BLUETOOTH_SERVICE);
       BluetoothAdapter bluetoothAdapterTmp = bluetoothManager.getAdapter();
@@ -1035,7 +1036,7 @@ public class BluetoothLePlugin extends CordovaPlugin {
       PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, returnObj);
       pluginResult.setKeepCallback(true);
       callbackContext.sendPluginResult(pluginResult);
-      return;      
+      return;
     } else {
       // Already initialized, so use the bluetoothAdapter class property to get all the info
       addProperty(returnObj, keyAddress, bluetoothAdapter.getAddress());
@@ -1046,10 +1047,10 @@ public class BluetoothLePlugin extends CordovaPlugin {
       addProperty(returnObj, keyIsDiscoverable, bluetoothAdapter.getScanMode() == BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE);
       PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, returnObj);
       pluginResult.setKeepCallback(true);
-      callbackContext.sendPluginResult(pluginResult);      
+      callbackContext.sendPluginResult(pluginResult);
       return;
     }
-    
+
   }
 
   private void enableAction(CallbackContext callbackContext) {
@@ -1576,7 +1577,8 @@ public class BluetoothLePlugin extends CordovaPlugin {
       connection.remove(operationConnect);
     } else {
       //Very unlikely that this is DISCONNECTING
-      connection.put(operationConnect, callbackContext);
+      connection.remove(operationConnect);
+      connection.put(operationDisconnect, callbackContext);
     }
 
     bluetoothGatt.disconnect();
@@ -1695,7 +1697,7 @@ public class BluetoothLePlugin extends CordovaPlugin {
         boolean bool = ((Boolean) localMethod.invoke(localBluetoothGatt, new Object[0])).booleanValue();
         return bool;
       }
-    } 
+    }
     catch (Exception localException) {
       Log.e("BLE", "An exception occured while refreshing device cache");
     }
@@ -3858,6 +3860,7 @@ public class BluetoothLePlugin extends CordovaPlugin {
       //Get the connected device
       BluetoothDevice device = gatt.getDevice();
       String address = device.getAddress();
+      Bool isConnecting = true;
 
       //Check for queued operations in progress on this device
       if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -3873,6 +3876,10 @@ public class BluetoothLePlugin extends CordovaPlugin {
       }
 
       CallbackContext callbackContext = (CallbackContext) connection.get(operationConnect);
+      if (callbackContext == null) {
+          isConnecting = false;
+          callbackContext = (CallbackContext) connection.get(operationDisconnect);
+      }
 
       JSONObject returnObj = new JSONObject();
 
@@ -3944,9 +3951,15 @@ public class BluetoothLePlugin extends CordovaPlugin {
           return;
         }
 
-        addProperty(returnObj, keyStatus, statusDisconnected);
+        if (!isConnecting) {
+            addProperty(returnObj, keyStatus, statusDisconnected);
+            callbackContext.success(returnObj);
+        } else {
+            addProperty(returnObj, keyError, errorConnect);
+            addProperty(returnObj, keyMessage, logConnectFail);
 
-        callbackContext.success(returnObj);
+            callbackContext.error(returnObj);
+        }
       }
     }
 
